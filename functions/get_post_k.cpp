@@ -19,6 +19,7 @@ double get_post_k(NumericVector theta, List f_list) {
   arma::vec      acf_draw = f_list["acf_draw"];
   NumericVector  sig2_draw = f_list["sig2_draw"];
   NumericVector  k_V = f_list["k.V"];
+  arma::vec theta_arma = Rcpp::as<arma::vec>(theta);
   // matrices
   NumericVector  y = f_list["y"];
   arma::mat      b_draw_nr = f_list["b_draw.nr"];
@@ -33,6 +34,7 @@ double get_post_k(NumericVector theta, List f_list) {
   // list
   List           acf_set = f_list["acf_set"];
   
+  k_draw_nr.slice(nr1-1).submat(0, 0, theta_arma.n_elem-1, 0) = theta_arma;
   // 2) get fit of specific neuron (nr2)
   for (int nn = 0; nn < Q; nn++) {
     int Mlay = MM[nn];
@@ -73,7 +75,6 @@ double get_post_k(NumericVector theta, List f_list) {
   
   for (int i = 0; i < ii2; i++) {
     double logPrbp = R::dnorm(theta[i], 0, std::sqrt(k_V[i]), true);
-    //sum(dnorm(theta, 0, sqrt(k.V[1:MM[nr1],nr2,nr1]), log=TRUE))
     logPrior += logPrbp;
   }
   

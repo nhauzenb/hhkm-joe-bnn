@@ -18,7 +18,8 @@ NumericVector get_post_grad_k(NumericVector theta, List f_list) {
   arma::vec      MM = f_list["MM"];
   arma::vec      acf_draw = f_list["acf_draw"];
   NumericVector  sig2_draw = f_list["sig2_draw"];
-  NumericVector  k_V = f_list["k.V"];
+  NumericVector  k_V = f_list["k.V"];  
+  arma::vec theta_arma = Rcpp::as<arma::vec>(theta);
   // matrices
   NumericVector  y = f_list["y"];
   arma::mat      b_draw_nr = f_list["b_draw.nr"];
@@ -35,7 +36,10 @@ NumericVector get_post_grad_k(NumericVector theta, List f_list) {
   NumericVector  normalizer = 1/Rcpp::sqrt(sig2_draw);
   arma::mat      y_norm = y * normalizer;
   
+  k_draw_nr.slice(nr1-1).submat(0, 0, theta_arma.n_elem-1, 0) = theta_arma;
+  
   // 2) get fit of specific neuron (nr2)
+  arma::vec chain_grad(y.size(), arma::fill::ones);
   for (int nn = 0; nn < Q; nn++) {
     int Mlay = MM[nn];
     NumericMatrix X_hat_n = wrap(X_hat_nrcpp.slice(nn));
@@ -50,12 +54,20 @@ NumericVector get_post_grad_k(NumericVector theta, List f_list) {
     NumericMatrix X_hat_col_1 = act_function(X_hat_fit);
     arma::mat X_hat_fit_save = Rcpp::as<arma::mat>(X_hat_col_1);
     X_hat_nrcpp.slice(nn+1).col(nr2-1) = X_hat_fit_save;
+    
+    if (nn+1 > nr1) {
+      Function act_gradient = acf_set_1["grad"];
+      NumericVector z_grad = act_gradient(X_hat_fit);
+      arma::vec z_grad_arma = Rcpp::as<arma::vec>(z_grad);
+      chain_grad %= z_grad_arma * matK(nr2-1, 0);
+    }
   }
+  arma::vec norm_arma = Rcpp::as<arma::vec>(normalizer);
   arma::mat X_hat_final = X_hat_nrcpp.slice(QQ-1).col(nr2-1);
+  X_hat_final.col(0) %= norm_arma; 
   arma::mat fit_nr = X_hat_final * b_draw_nr;
   
   // 3) get fit of all other neurons
-  //arma::vec norm_arma = Rcpp::as<arma::vec>(normalizer);
   
   int colX = X_hat_wonrcpp.slice(QQ-1).n_cols;
   for (int j = 0; j < colX; j++) {
@@ -78,7 +90,7 @@ NumericVector get_post_grad_k(NumericVector theta, List f_list) {
   arma::mat  yy = (y_norm - fit_wonr);
   
   arma::mat  matTheta = theta;
-  arma::mat  matXhat1  = X_hat_nrcpp.slice(nr1-1); // change to full Xhat
+  arma::mat  matXhat1  = X_hat_nrcpp.slice(nr1-1);
   arma::mat  matXhat = matXhat1.cols(0, Mlay-1);
   arma::mat  X_hat_mult = matXhat * matTheta;
   
@@ -90,12 +102,13 @@ NumericVector get_post_grad_k(NumericVector theta, List f_list) {
   // Inner derivative of act. function
   NumericVector dhqdkq(X_hat_theta.size());
   for (size_t i = 0; i < X_hat_theta.size(); i++) {
-    dhqdkq[i] = b_draw_der[0] * X_hat_theta[i] * normalizer[i];
+    dhqdkq[i] = b_draw_der[0] * chain_grad[i] * X_hat_theta[i] * normalizer[i];
   }
   // multiply error with inner derivative
   NumericVector err_der(dhqdkq.size());
   for (size_t i = 0; i < dhqdkq.size(); i++) {
     err_der[i] = (yy - fit_nr)[i] * dhqdkq[i];
+    
   }
   
   arma::mat materr =Rcpp::as<arma::vec>(err_der);
@@ -103,7 +116,12 @@ NumericVector get_post_grad_k(NumericVector theta, List f_list) {
   
   NumericVector dlogLik = wrap(crossProd);
   
-  return (dlogLik);
+  NumericVector dlogpost(dlogLik.size());
+  for (int i = 0; i < dlogLik.size(); i++) {
+    dlogpost[i] = dlogLik[i] - theta[i]/k_V[i];
+  }
+  
+  return (dlogpost);
   
 }
 
