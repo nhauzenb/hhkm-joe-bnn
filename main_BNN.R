@@ -215,7 +215,7 @@ ht_draw <- log(sig2_draw)
 
 if (substr(main.spec,1,6) == "deepNN") acf_draw <- rep(1,Q) else acf_draw <- rep(1,M)
 nuts.eps <- rep(0.0001,Q)
-par_list <- list(list(M_adapt = 1, M_diag = NULL))[rep(1,M)]
+par_list <- list(list(M_adapt = ceiling(0.8*nburn), M_diag = NULL))[rep(1,M)]
 par_list <- list(par_list)[rep(1,Q)]
 
 ###--------------------------------------------------------------------------###
@@ -399,7 +399,7 @@ for (irep in seq_len(ntot)){
     for (nr1 in seq_len(Q)) {
       for (rr in seq_len(R)){
         acf_draw[nr1] <- rr
-        for (nn in 1:Q) X.hat[,1:MM[nn+1],nn+1] <- acf_set[[acf_draw[nn]]][["func"]](X.hat[,1:MM[nn],nn]%*%as.matrix(k_draw[1:MM[nn],,nn])) # MM[nr1]?
+        for (nn in 1:Q) X.hat[,1:MM[nn+1],nn+1] <- acf_set[[acf_draw[nn]]][["func"]](X.hat[,1:MM[nn],nn]%*%as.matrix(k_draw[1:MM[nn],,nn])) # Forward pass across all layers under candidate activation
         
         fit.nr <- as.matrix(X.hat[,1:M,QQ])%*%b_draw
         
@@ -411,9 +411,9 @@ for (irep in seq_len(ntot)){
       probs <- exp(post.fc -max(post.fc))/sum(exp(post.fc -max(post.fc))) # Get posterior weights 
       fc.slct <- sample(1:R, 1, prob = as.numeric(probs)) # Sample indicators from multinomial distribution
       
-      X.hat[,1:MM[nr1+1],nr1+1] <- acf_set[[fc.slct]][["func"]](y.hat[,,nr1]) # Get non-linear factors X.hat
-      Xho.hat[,1:MM[nr1+1],nr1+1] <- acf_set[[fc.slct]][["func"]](yho.hat[,,nr1]) # Get non-linear factors X.hat
       acf_draw[nr1] <- fc.slct
+      for (nn in 1:Q) X.hat[,1:MM[nn+1],nn+1]   <- acf_set[[acf_draw[nn]]][["func"]](X.hat[,1:MM[nn],nn]%*%as.matrix(k_draw[1:MM[nn],,nn]))   # Get non-linear factors X.hat
+      for (nn in 1:Q) Xho.hat[,1:MM[nn+1],nn+1] <- acf_set[[acf_draw[nn]]][["func"]](Xho.hat[,1:MM[nn],nn]%*%as.matrix(k_draw[1:MM[nn],,nn])) # Get non-linear factors Xho.hat
       
     } #- end loop over layers (Q) for deep case
   } else {
@@ -430,8 +430,8 @@ for (irep in seq_len(ntot)){
     probs <- exp(post.fc -max(post.fc))/sum(exp(post.fc -max(post.fc))) # Get posterior weights 
     fc.slct <- sample(1:R, 1, prob = as.numeric(probs)) # Sample indicators from multinomial distribution
     
-    for (nn in 1:Q) X.hat[,1:MM[nn+1],nn+1] <- acf_set[[fc.slct]][["func"]](y.hat[,,nn]) # Get non-linear factors
-    for (nn in 1:Q) Xho.hat[,1:MM[nn+1],nn+1] <- acf_set[[fc.slct]][["func"]](yho.hat[,,nn]) # Get non-linear factors X.hatX.hat
+    for (nn in 1:Q) X.hat[,1:MM[nn+1],nn+1]   <- acf_set[[fc.slct]][["func"]](X.hat[,1:MM[nn],nn]%*%as.matrix(k_draw[1:MM[nn],,nn]))   # Get non-linear factors X.hat
+    for (nn in 1:Q) Xho.hat[,1:MM[nn+1],nn+1] <- acf_set[[fc.slct]][["func"]](Xho.hat[,1:MM[nn],nn]%*%as.matrix(k_draw[1:MM[nn],,nn])) # Get non-linear factors Xho.hat
     if (substr(main.spec,1,6) == "deepNN") acf_draw <- rep(fc.slct,Q) else acf_draw <- rep(fc.slct,M)
   }
   
@@ -465,7 +465,6 @@ for (irep in seq_len(ntot)){
     ht_draw <- log(sig2_draw) # Define log-variance
   }
   
-  sig2_draw[sig2_draw > 20*sd(y)] <- 20*sd(y) # Offsetting: upper-bound
   
   ###--------------------------------------------------------------------------###
   ###------------------------------ Step 8: -----------------------------------###
